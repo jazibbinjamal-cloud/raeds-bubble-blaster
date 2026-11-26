@@ -174,7 +174,7 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
   const GOAL = 28, TIME = 120, MAX_LEVEL = 5;
   // time between new bubbles, as a share of the normal gap (smaller = more bubbles), tuned by play-testing
   // level 5 gets its own number for upright phones, where bubbles take longer to rise into reach
-  const SPAWN_RATE = { 4: 1.45, 5: 3.3 }, SPAWN_RATE_UPRIGHT = { 5: 0.9 };
+  const SPAWN_RATE = { 4: 1.45 }, SPAWN_RATE_UPRIGHT = { 5: 0.8 };
   // The play area adapts to the screen: wide when the phone is sideways, tall when upright.
   let W = 960, H = 540, portrait = false, TOP = 54, KID_X = 120, Y_MIN = 120, Y_MAX = 455;
   let MACHINE = { x: 780, y: 470 };
@@ -327,8 +327,8 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
   const TEACHER_STAY = 10;
   let teacherSeen = false;
   try { teacherSeen = sessionStorage.getItem('rbb-teacher') === '1'; } catch (e) {}
-  const pickGap = () => (Math.random() < 0.5 ? 5 : 10);
-  const GIRL_MIN_BUBBLES = 3;
+  const pickGap = () => (Math.random() < 0.5 ? (portrait ? 5 : 4) : (portrait ? 10 : 7));
+  const GIRL_MIN_BUBBLES = 2; const L5_WIDE_SPEED = 2.2;
   const GIRL_LINES = ["I'm not letting you win!", 'Bye-bye bubbles!', 'Too slow, Raed!', 'Watch this!', 'My bubbles now!', 'Whoosh time!'];
   const npcX = () => W - (portrait ? 64 : 100);
   const npcMaxY = () => MACHINE.y - 145; // keeps his feet above the foam
@@ -477,10 +477,10 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
     const ty = Math.max(lo, Math.min(hi, g.targetY ?? g.y));
     g.y += Math.sign(ty - g.y) * Math.min(Math.abs(ty - g.y), 320 * dt);
     g.y = Math.max(lo, Math.min(hi, g.y));
-    // after her 5 or 10 seconds she waits for at least 3 bubbles and lines up with them,
+    // after her 5 or 10 seconds she waits for at least 2 bubbles on screen,
     // then says a cheeky line for 2 seconds (cheeks puffed for the last one) and blows
     const live = bubbles.filter(b => !b.blown).length;
-    if (g.talk <= 0 && g.timer <= 0 && live >= GIRL_MIN_BUBBLES && Math.abs(ty - g.y) < 30) {
+    if (g.talk <= 0 && g.timer <= 0 && live >= GIRL_MIN_BUBBLES) {
       g.talk = 2; { const pool = GIRL_LINES.filter(s => s !== g.last); g.line = g.last = pool[Math.floor(Math.random() * pool.length)]; }
     }
     if (g.talk > 0) g.talk -= dt;
@@ -516,6 +516,7 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
       const t = Math.max(0.8, (x0 - (KID_X + 80)) / -vx) * 0.35;
       vy = (ty - y0) / t;
     }
+    if (level === 5 && !portrait) { vx *= L5_WIDE_SPEED; vy *= L5_WIDE_SPEED; } // wide screens: faster bubbles keep level 5 hard
     bubbles.push({
       x: x0, y: y0, ty,
       vx, vy,
