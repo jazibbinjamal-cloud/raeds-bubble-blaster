@@ -174,7 +174,7 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
   const GOAL = 28, TIME = 120, MAX_LEVEL = 5;
   // time between new bubbles, as a share of the normal gap (smaller = more bubbles), tuned by play-testing
   // level 5 gets its own number for upright phones, where bubbles take longer to rise into reach
-  const SPAWN_RATE = { 4: 1.45, 5: 1.75 }, SPAWN_RATE_UPRIGHT = { 5: 0.9 };
+  const SPAWN_RATE = { 4: 1.45, 5: 3.3 }, SPAWN_RATE_UPRIGHT = { 5: 0.9 };
   // The play area adapts to the screen: wide when the phone is sideways, tall when upright.
   let W = 960, H = 540, portrait = false, TOP = 54, KID_X = 120, Y_MIN = 120, Y_MAX = 455;
   let MACHINE = { x: 780, y: 470 };
@@ -328,6 +328,8 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
   let teacherSeen = false;
   try { teacherSeen = sessionStorage.getItem('rbb-teacher') === '1'; } catch (e) {}
   const pickGap = () => (Math.random() < 0.5 ? 5 : 10);
+  const GIRL_MIN_BUBBLES = 3;
+  const GIRL_LINES = ["I'm not letting you win!", 'Bye-bye bubbles!', 'Too slow, Raed!', 'Watch this!', 'My bubbles now!', 'Whoosh time!'];
   const npcX = () => W - (portrait ? 64 : 100);
   const npcMaxY = () => MACHINE.y - 145; // keeps his feet above the foam
   const npcMinY = () => Y_MIN + 24;
@@ -373,7 +375,7 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
     ghost = null; ghostTimer = 3;
     teacher = null;
     // Level 5: the naughty girl blows every bubble away every 5 or 10 seconds
-    girl = { y: Math.round((npcMinY() + npcMaxY()) / 2), timer: pickGap(), puff: 0, blow: 0, look: 0 };
+    girl = { y: Math.round((npcMinY() + npcMaxY()) / 2), timer: pickGap(), talk: 0, line: '', puff: 0, blow: 0, look: 0 };
     // Level 4: the naughty kid on the right pops 38 to 42 bubbles in 2 minutes (from Raed's whiteboard drawing)
     npc = { y: Math.round((npcMinY() + npcMaxY()) / 2), targetY: 0, cooldown: 1.5, recoil: 0, popped: 0, inFlight: 0,
             goal: 38 + Math.floor(Math.random() * 5), target: null, wander: 0 };
@@ -475,14 +477,22 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
     const ty = Math.max(lo, Math.min(hi, g.targetY ?? g.y));
     g.y += Math.sign(ty - g.y) * Math.min(Math.abs(ty - g.y), 320 * dt);
     g.y = Math.max(lo, Math.min(hi, g.y));
-    g.puff = g.timer <= 1 ? 1 : 0; // cheeks puffed for the last second
-    if (g.timer <= 0) {
+    // after her 5 or 10 seconds she waits for at least 3 bubbles and lines up with them,
+    // then says a cheeky line for 2 seconds (cheeks puffed for the last one) and blows
+    const live = bubbles.filter(b => !b.blown).length;
+    if (g.talk <= 0 && g.timer <= 0 && live >= GIRL_MIN_BUBBLES && Math.abs(ty - g.y) < 30) {
+      g.talk = 2; { const pool = GIRL_LINES.filter(s => s !== g.last); g.line = g.last = pool[Math.floor(Math.random() * pool.length)]; }
+    }
+    if (g.talk > 0) g.talk -= dt;
+    g.puff = g.talk > 0 && g.talk <= 1 ? 1 : 0;
+    if (g.line && g.talk <= 0) {
+      g.line = '';
       for (const b of bubbles) {
         b.blown = true; b.ty = undefined;
         if (Math.random() < 0.5) { b.vx = -rnd(650, 950); b.vy = rnd(-140, 100); }
         else { b.vy = -rnd(520, 760); b.vx = -rnd(60, 260); }
       }
-      g.blow = 0.8; g.timer = pickGap();
+      g.blow = 0.8; g.timer = pickGap(); g.talk = 0;
       sfx.whoosh();
     }
   }
@@ -798,6 +808,28 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
     ctx.restore();
   }
 
+  // a pencil speech bubble whose tail points right, toward whoever is talking
+  function speech(msg, rightX, topY, maxW) {
+    ctx.save();
+    ctx.font = `${portrait ? 21 : 22}px "Gochi Hand", "Comic Sans MS", cursive`;
+    const lines = [];
+    let line = '';
+    for (const w of msg.split(' ')) { const t = line ? line + ' ' + w : w; if (ctx.measureText(t).width > maxW && line) { lines.push(line); line = w; } else line = t; }
+    lines.push(line);
+    const bw = Math.max(...lines.map(l => ctx.measureText(l).width)) + 28, bh = lines.length * 26 + 18;
+    const bx = Math.max(8, rightX - 22 - bw), by = topY;
+    ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#3b3a3f'; ctx.lineWidth = 2.5; ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(bx + 14, by); ctx.lineTo(bx + bw - 14, by); ctx.quadraticCurveTo(bx + bw, by, bx + bw, by + 14);
+    ctx.lineTo(bx + bw, by + bh * 0.45); ctx.lineTo(bx + bw + 22, by + bh * 0.6); ctx.lineTo(bx + bw, by + bh * 0.72);
+    ctx.lineTo(bx + bw, by + bh - 14); ctx.quadraticCurveTo(bx + bw, by + bh, bx + bw - 14, by + bh);
+    ctx.lineTo(bx + 14, by + bh); ctx.quadraticCurveTo(bx, by + bh, bx, by + bh - 14); ctx.lineTo(bx, by + 14); ctx.quadraticCurveTo(bx, by, bx + 14, by);
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#c8452f'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    lines.forEach((l, i) => ctx.fillText(l, bx + 14, by + 10 + i * 26));
+    ctx.restore();
+  }
+
   function drawGirl() {
     const g = girl, x = npcX(), y = g.y;
     ctx.save();
@@ -814,10 +846,18 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
       }
       ctx.strokeStyle = '#3b3a3f'; ctx.lineWidth = 3;
     }
-    // pigtails with pink bows
-    ctx.beginPath(); ctx.moveTo(x - 18, y - 70); ctx.quadraticCurveTo(x - 32, y - 60, x - 28, y - 44); ctx.moveTo(x + 18, y - 70); ctx.quadraticCurveTo(x + 32, y - 60, x + 28, y - 44); ctx.stroke();
-    ctx.fillStyle = '#f48fb1';
-    for (const sx of [-1, 1]) { ctx.beginPath(); ctx.moveTo(x + sx * 20, y - 70); ctx.lineTo(x + sx * 30, y - 78); ctx.lineTo(x + sx * 30, y - 64); ctx.closePath(); ctx.fill(); ctx.stroke(); }
+    // long wavy hair down to her shoulders, drawn behind the head
+    ctx.fillStyle = '#5a3b2e';
+    ctx.beginPath();
+    ctx.moveTo(x - 4, y - 88);
+    ctx.bezierCurveTo(x - 34, y - 90, x - 30, y - 66, x - 32, y - 56);
+    for (let i = 0; i < 3; i++) ctx.quadraticCurveTo(x - 40 + (i % 2) * 14, y - 48 + i * 7, x - 30 + (i % 2) * 2, y - 40 + i * 7);
+    ctx.quadraticCurveTo(x - 20, y - 22, x - 10, y - 30);
+    ctx.lineTo(x + 10, y - 30);
+    ctx.quadraticCurveTo(x + 20, y - 22, x + 30, y - 26);
+    for (let i = 2; i >= 0; i--) ctx.quadraticCurveTo(x + 40 - (i % 2) * 14, y - 34 - (2 - i) * 7, x + 30 - (i % 2) * 2, y - 40 - (2 - i) * 7);
+    ctx.bezierCurveTo(x + 30, y - 66, x + 34, y - 90, x - 4, y - 88);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
     // frock, arms and legs
     ctx.beginPath(); ctx.moveTo(x, y - 40); ctx.lineTo(x, y - 20); ctx.stroke();
     ctx.fillStyle = '#f7b6cf';
@@ -828,6 +868,15 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
     const puff = g.puff > 0 || g.blow > 0;
     ctx.fillStyle = puff ? '#ffd9d2' : '#fbfaf4';
     ctx.beginPath(); ctx.arc(x, y - 62, puff ? 23 : 20, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    // fringe across the forehead
+    ctx.fillStyle = '#5a3b2e';
+    ctx.beginPath(); ctx.moveTo(x - 19, y - 68); ctx.quadraticCurveTo(x - 8, y - 92, x + 19, y - 70); ctx.quadraticCurveTo(x + 6, y - 78, x - 2, y - 72); ctx.quadraticCurveTo(x - 10, y - 78, x - 19, y - 68); ctx.fill();
+    // big pink bow on top
+    ctx.fillStyle = '#f06292'; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.moveTo(x + 2, y - 86); ctx.lineTo(x - 20, y - 100); ctx.lineTo(x - 18, y - 76); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x + 2, y - 86); ctx.lineTo(x + 24, y - 100); ctx.lineTo(x + 22, y - 76); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(x + 2, y - 87, 5, 0, 7); ctx.fill(); ctx.stroke();
+    ctx.lineWidth = 3;
     ctx.fillStyle = '#3b3a3f';
     ctx.beginPath(); ctx.arc(x - 8, y - 67, 2.3, 0, 7); ctx.arc(x + 6, y - 67, 2.3, 0, 7); ctx.fill();
     // playful arched eyebrows, one raised for a cheeky look
@@ -843,12 +892,7 @@ canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
       ctx.lineWidth = 2.4;
       ctx.beginPath(); ctx.moveTo(x - 10, y - 55); ctx.quadraticCurveTo(x - 2, y - 49, x + 9, y - 57); ctx.stroke();
     }
-    if (g.puff > 0 && g.blow <= 0) {
-      ctx.fillStyle = '#c8452f'; ctx.textAlign = 'center';
-      ctx.font = '20px "Gochi Hand", "Comic Sans MS", cursive';
-      ctx.textAlign = 'right';
-      ctx.fillText('Hmmm…', x - 30, y - 70);
-    }
+    if (g.line && g.talk > 0) speech(g.line, x - 36, Math.max(TOP + 6, y - 100), portrait ? 170 : 220);
     ctx.restore();
   }
 

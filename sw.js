@@ -1,6 +1,6 @@
 // Network first, so a new version shows as soon as the phone is online;
 // falls back to the saved copy so the game also opens offline.
-const CACHE = 'bubble-blaster-v1';
+const CACHE = 'bubble-blaster-v2';
 const CORE = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
